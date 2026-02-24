@@ -1,37 +1,25 @@
 "use client";
+
 import {
   darkTheme,
   getDefaultWallets,
   RainbowKitProvider,
 } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
+
 import { configureChains, createConfig, WagmiConfig } from "wagmi";
 import { sepolia } from "wagmi/chains";
-import { publicProvider } from "wagmi/providers/public";
+import { alchemyProvider } from "wagmi/providers/alchemy";
 
-const ethereumPlus = {
-  id: 10023,
-  name: "Ethereum+",
-  network: "ethereumplus",
-  nativeCurrency: {
-    name: "Ethereum+",
-    symbol: "ETH",
-    decimals: 18,
-  },
-  rpcUrls: {
-    default: {
-      http: ["https://ethereumplus.pwrlabs.io/"],
-    },
-    public: {
-      http: ["https://ethereumplus.pwrlabs.io/"],
-    },
-  },
-  blockExplorers: {
-    default: { name: "Blockscout", url: "https://ethplusexplorer.pwrlabs.io/" },
-  },
-  testnet: true,
-};
-const { chains, publicClient } = configureChains([ethereumPlus], [publicProvider()])
+// ✅ Configure Sepolia with Alchemy (wagmi v1 way)
+const { chains, publicClient } = configureChains(
+  [sepolia],
+  [
+    alchemyProvider({
+      apiKey: process.env.NEXT_PUBLIC_ALCHEMY_KEY,
+    }),
+  ]
+);
 
 const { connectors } = getDefaultWallets({
   appName: "nft-marketplace",
@@ -45,7 +33,7 @@ const wagmiConfig = createConfig({
   publicClient,
 });
 
-export  function Providers({ children }) {
+export function Providers({ children }) {
   return (
     <WagmiConfig config={wagmiConfig}>
       <RainbowKitProvider chains={chains} theme={darkTheme()}>

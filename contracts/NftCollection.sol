@@ -95,10 +95,10 @@ contract NftCollection is ERC721Enumerable, Ownable(msg.sender) {
     }
 
     function withdraw() public payable onlyOwner {
-        payable(msg.sender).transfer(address(this).balance);
-    }
+    (bool success, ) = msg.sender.call{value: address(this).balance}("");
+    require(success, "Transfer failed");
 }
-
+}
 library Base64 {
     bytes internal constant TABLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

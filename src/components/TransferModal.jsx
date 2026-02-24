@@ -9,8 +9,11 @@ import Backdrop from '@mui/material/Backdrop';
 export function TransferModal({open,handleClose,tokenId,address,transferNft}) {
     const [receiver, setReceiver] = useState('');
     const handleTransferNFT = () => {
-        
-        transferNft(address, receiver, tokenId);
+        if (!receiver) {
+          alert("Enter receiver wallet address");
+          return; 
+        }
+        transferNft(address, receiver, Number(tokenId));
         handleClose();
       };
 
@@ -39,7 +42,7 @@ export function TransferModal({open,handleClose,tokenId,address,transferNft}) {
         <div className="flex justify-between bg-primary bg-gradient-to-r from-primary text-white  p-6">
               <div >
                 <h1 id="modal-modal-title" className="text-2xl font-semibold mb-4">
-                  Transfer NFTee
+                  Transfer NFT
                 </h1>
                 <h2>#{tokenId}</h2>
                 <h2>#{receiver}</h2>

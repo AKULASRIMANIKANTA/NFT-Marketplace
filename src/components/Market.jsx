@@ -1,213 +1,226 @@
 "use client"
 import React, { useEffect, useState } from 'react'
-import { useAccount, useContractRead, useContractWrite } from 'wagmi'
+import { useAccount, useContractRead } from 'wagmi'
 import { NftCollection, CollectionABI, NftMarketPlace, MarketABI } from '../constants'
-import { readContract, waitForTransaction, writeContract } from 'wagmi/actions'
-import {HiMenu} from 'react-icons/hi'
-import { MdOutlineSell } from "react-icons/md";
-import { BiTransfer } from "react-icons/bi";
-import { MdOutlineBackspace } from "react-icons/md";
-import { ethers,getDefaultProvider } from 'ethers'
-
+import { readContract } from 'wagmi/actions'
+import { HiMenu } from 'react-icons/hi'
+import { MdOutlineSell, MdOutlineBackspace } from "react-icons/md";
+import { ethers } from 'ethers'
 
 export function Market() {
   const { address } = useAccount()
+  const [mounted, setMounted] = useState(false);
   const [tokenIds, setTokenIds] = useState([])
   const [metadataList, setMetadataList] = useState([])
-  const [menuOpen, setMenuOpen] = useState(null); 
-  const [tokenId,setTokenId] = useState(null)
-  const [listedNftees, setListedNftees] = useState([])
-  
-  
-  const toggleMenu = (index) => {
-    setMenuOpen(menuOpen === index ? null : index);
-  };
+  const [menuOpen, setMenuOpen] = useState(null);
+  const [loadingMetadata, setLoadingMetadata] = useState(false);
 
-  const {data : isApproved} = useContractRead({
-    address : NftCollection,
-    abi : CollectionABI,
-    functionName : "getApproved",
-    args : []
-  })
+  useEffect(() => setMounted(true), []);
 
-  const {data : listedNfts} = useContractRead({
-    address : NftMarketPlace,
-    abi : MarketABI,
-    functionName : "getNftListigs",
-    onSuccess(data){
-        const tokenIDs = data.map(token=>token.tokenId.toString())
-        setTokenIds(tokenIDs)
-        setListedNftees(data)
+  // 1. Fetch all listings from the contract
+  const { data: rawListings, refetch } = useContractRead({
+    address: NftMarketPlace,
+    abi: MarketABI,
+    functionName: "getNftListigs",
+    watch: true, 
+    onSuccess(data) {
+      if (data) {
+        // FILTER: Only show items that are actively for sale (isSold must be false)
+        const activeListings = data.filter(listing => !listing.isSold);
+        
+        const tokenIDs = activeListings.map(token => token.tokenId.toString());
+        setTokenIds(tokenIDs);
+      }
     }
-  })
-    
-  const {data : name} = useContractRead({
-    address : NftCollection,
-    abi : CollectionABI,
-    functionName : "name",
-  })
-  const {data : symbol} = useContractRead({
-    address : NftCollection,
-    abi : CollectionABI,
-    functionName : "symbol",
-  })
+  });
+
   const { data: listingFee } = useContractRead({
     address: NftMarketPlace,
     abi: MarketABI,
     functionName: "listingFee",
   });
 
-  
-  async function buyNft(tokenId){
+  const toggleMenu = (index) => {
+    setMenuOpen(menuOpen === index ? null : index);
+  };
 
+  async function buyNft(tokenId, price) {
     try {
-        const provider =  new ethers.BrowserProvider(window.ethereum)
-        const signer = await provider.getSigner()
-        console.log(provider);
-        console.log(signer);
-        const marketPlaceContract = new ethers.Contract(
-            NftMarketPlace,
-            MarketABI,
-            signer
-        )
-        const listing = listedNftees.find(token => token.tokenId.toString() === tokenId)
-        if (!listing) {
-          throw new Error('Listing not found')
-        }
-        const price = listing.price.toString()/10**18;
-        console.log(price);
-        const tx = await marketPlaceContract.buyNFT(tokenId,{
-            value : ethers.parseEther(`${price}`)
-        })
-        await tx.wait()
-        
-    } catch (error) {
-        console.error('Listing NFT failed:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        window.alert(error)
-    }
-  }
-  async function revertListing(tokenId){
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const marketPlaceContract = new ethers.Contract(NftMarketPlace, MarketABI, signer)
 
-    try {
-        const provider =  new ethers.BrowserProvider(window.ethereum)
-        const signer = await provider.getSigner()
-        console.log(provider);
-        console.log(signer);
-        const marketPlaceContract = new ethers.Contract(
-            NftMarketPlace,
-            MarketABI,
-            signer
-        )
-        const tx = await marketPlaceContract.revertListing(tokenId)
-        await tx.wait()
-        
+      // Execute buyNFT transaction
+      const tx = await marketPlaceContract.buyNFT(tokenId, {
+        value: price, 
+      });
+      await tx.wait();
+      refetch(); 
     } catch (error) {
-        console.error('Listing NFT failed:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        window.alert(error)
-    }
-  }
-  async function dispute(tokenId){
-
-    try {
-        const provider =  new ethers.BrowserProvider(window.ethereum)
-        const signer = await provider.getSigner()
-        const marketContract = new ethers.Contract(
-            NftMarketPlace,
-            MarketABI,
-            signer
-        )
-        const tx = await marketContract.disputeSale(tokenId)
-        await tx.wait()
-        
-    } catch (error) {
-        console.error('Dispute of NFT failed:', error);
-        console.error('Error details:', JSON.stringify(error, null, 2));
-        window.alert(error)
+      console.error('Purchase failed:', error);
+      window.alert("Transaction failed. Check console for details.");
     }
   }
 
+  async function revertListing(tokenId) {
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const marketPlaceContract = new ethers.Contract(NftMarketPlace, MarketABI, signer)
 
+      const tx = await marketPlaceContract.revertListing(tokenId); //
+      await tx.wait();
+      refetch(); 
+    } catch (error) {
+      console.error('Revert failed:', error);
+    }
+  }
 
-  // Fetch metadata for a given token ID
   const fetchTokenMetadata = async (tokenId) => {
-    const  tokenMetadata  = await readContract({
-      address: NftCollection,
-      abi: CollectionABI,
-      functionName: 'tokenMetadata',
-      args: [tokenId],
-    })
-    return {tokenId,...tokenMetadata}
+    try {
+      const tokenMetadata = await readContract({
+        address: NftCollection,
+        abi: CollectionABI,
+        functionName: 'tokenMetadata',
+        args: [tokenId],
+      });
+      return {
+        tokenId,
+        title: tokenMetadata.title,
+        description: tokenMetadata.description,
+        image: tokenMetadata.image,
+      };
+    } catch (err) {
+      console.error("Metadata fetch error for ID", tokenId, err);
+      return null;
+    }
   }
 
+  // 2. Combine Blockchain Data with Metadata
   useEffect(() => {
-    if (tokenIds.length > 0) {
+    if (tokenIds.length > 0 && rawListings) {
       const fetchMetadata = async () => {
-        const metadataPromises = tokenIds.map((tokenId) => fetchTokenMetadata(tokenId))
-        const metadataArray = await Promise.all(metadataPromises)
-        const combinedData = metadataArray.map((metadata) => {
-          const listedNft = listedNftees.find((listed) => listed.tokenId.toString() === metadata.tokenId.toString())
-          return { ...metadata, ...listedNft };
-        });
-        setMetadataList(combinedData)
-        console.log(tokenIds);
-        console.log(metadataArray);
+        setLoadingMetadata(true);
+        const metadataPromises = tokenIds.map((id) => fetchTokenMetadata(id));
+        const metadataArray = await Promise.all(metadataPromises);
+        
+        const combinedData = metadataArray
+          .filter(m => m !== null)
+          .map((metadata) => {
+            const listedNft = rawListings.find(
+              (listed) => listed.tokenId.toString() === metadata.tokenId.toString()
+            );
+            return { ...metadata, ...listedNft };
+          });
+          
+        setMetadataList(combinedData);
+        setLoadingMetadata(false);
       }
-      fetchMetadata()
+      fetchMetadata();
+    } else {
+      setMetadataList([]);
     }
-  }, [listedNftees,tokenIds,address])
+  }, [tokenIds, rawListings]);
+
+  if (!mounted) return null;
 
   return (
-    <div>
-        {console.log(listedNfts)}
-        {console.log(tokenIds)}
-        {console.log(metadataList)}
-        {/* {console.log(provider)} */}
-      <h1>All Listed NFTees</h1>
-      <div className='container p-5'>
-        <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6'>
-            {metadataList.map((metadata, index) => (
-                <div key={index} className='bg-white shadow-lg rounded-lg overflow-hidden'>
-                <div className="cursor-pointer flex flex-col h-full shadow bg-gray-950 text-white overflow-hidden rounded-lg group" >
-                        <div className='relative h-6/7 h-full overflow-hidden'>
-                            {metadata.image && (
-                                <img src={metadata.image} alt='null' className="w-full h-full object-cover transition-transform duration-300 transform group-hover:scale-110" />
-                            )}
-                            <div className="absolute top-2 right-2 flex space-x-2">
-                                {metadata.seller != address && 
-                                <button onClick={()=>buyNft(`${metadata.tokenId}`)}  className="bg-gray-950 text-white px-2 py-1 rounded hover:bg-gray-900">
-                                    Buy
-                                </button>}
-                                <button onClick={(e) => {e.stopPropagation();  toggleMenu(index) }} className="bg-gray-950 text-white px-2 py-1 rounded hover:bg-gray-900">
-                                    <HiMenu />
-                                {menuOpen === index && (
-                                    <div className="absolute right-0 mt-4 bg-gray-900  w-40 shadow-lg sm:w-38 md:w-30 lg:w-40 z-10">
-                                    <div className="py-2 text-white">
-                                        {metadata.seller != address &&
-                                        <button onClick={()=>buyNft(`${metadata.tokenId}`)} className="flex items-center justify-start gap-2 w-full px-2 py-2 hover:bg-gray-700 transition-colors duration-300"><MdOutlineSell/> Buy</button>}
-                                        {metadata.seller == address &&                                           
-                                        <button onClick={()=>revertListing(`${metadata.tokenId}`)} className="flex items-center justify-start gap-2 w-full px-2 py-2 hover:bg-gray-700 transition-colors duration-300"><MdOutlineBackspace/> Remove Listing</button>}
-                                        {metadata.arbiter == address && 
-                                        <button onClick={()=>dispute(`${metadata.tokenId}`)} className="flex items-center justify-start gap-2 w-full px-2 py-2 hover:bg-gray-700 transition-colors duration-300"><MdOutlineBackspace/>Dispute</button>
-                                                                              }
-                                    </div>
-                                    </div>
-                                )}
-                                </button>
-                            </div>
-                        </div>
-                        <footer className='h-1/7 p-4 flex flex-col justify-between bg-gray-900 transition-colors duration-300 group-hover:bg-gray-800'>
-                            <div className="text-lg font-bold text-truncate">{typeof metadata.title === 'string' ? metadata.title : 'No title available'}</div>
-                            <div className="text-md font-semibold text-truncate">{name}</div>
-                            {metadata.seller == address && <div className="text-sm text-gray-400 text-truncate">Listed And Owned</div>}
-                            {/* <div className="text-sm  text-gray-500 text-truncate">{token.approved_account_ids[MarketplaceContract]  ? "Listed" : "Not Listed" }</div> */}
-                        </footer>
-                    </div>
-                </div>
-            ))}
+    <div className="min-h-screen w-full px-6 py-8 bg-gradient-to-br from-[#0f172a] via-[#111827] to-black pb-20">
+      
+      {/* HEADER SECTION */}
+      <div className="backdrop-blur-xl bg-white/5 border border-white/10 text-white p-8 rounded-2xl mb-10 shadow-2xl">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-4xl font-bold mb-2 tracking-wide">NFT Marketplace</h1>
+            <p className="text-gray-400">Discover and trade unique digital assets</p>
+          </div>
+          <button 
+            onClick={() => refetch()} 
+            className="p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all active:scale-95"
+          >
+            ↻ Refresh Market
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+          <StatCard title="Active Listings" value={metadataList.length} />
+          <StatCard title="Listing Fee" value={listingFee ? `${ethers.formatEther(listingFee)} ETH` : "--"} />
+          <StatCard title="My Wallet" value={address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "Disconnected"} />
+        </div>
+      </div>
+
+      {/* NFT GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+        {metadataList.length === 0 && !loadingMetadata && (
+          <div className="col-span-full py-20 text-center backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl">
+            <div className="text-5xl mb-4">🧊</div>
+            <h2 className="text-2xl font-semibold text-white">No NFTs listed yet</h2>
+            <p className="text-gray-400 mt-2">Check back later or mint your own!</p>
+          </div>
+        )}
+
+        {metadataList.map((nft, index) => (
+          <div key={index} className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-xl hover:scale-[1.02] transition-all duration-300 group">
+            
+            <div className="relative h-64 bg-gray-800">
+              <img src={nft.image} alt={nft.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+              
+              <div className="absolute top-4 right-4 flex gap-2">
+                {nft.seller?.toLowerCase() !== address?.toLowerCase() && (
+                  <button 
+                    onClick={() => buyNft(nft.tokenId.toString(), nft.price)}
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg"
+                  >
+                    Buy Now
+                  </button>
+                )}
+
+                <button onClick={(e) => { e.stopPropagation(); toggleMenu(index); }} className="bg-black/60 backdrop-blur-md p-2 rounded-xl text-white">
+                  <HiMenu size={20} />
+                </button>
+
+                {menuOpen === index && (
+                  <div className="absolute right-0 top-12 bg-gray-900 border border-white/10 rounded-xl shadow-2xl w-48 z-30 overflow-hidden">
+                    {nft.seller?.toLowerCase() === address?.toLowerCase() ? (
+                      <button onClick={() => revertListing(nft.tokenId.toString())} className="flex items-center gap-2 w-full px-4 py-3 hover:bg-red-500/20 text-red-400 text-sm">
+                        <MdOutlineBackspace /> Remove Listing
+                      </button>
+                    ) : (
+                      <button onClick={() => buyNft(nft.tokenId.toString(), nft.price)} className="flex items-center gap-2 w-full px-4 py-3 hover:bg-blue-500/20 text-white text-sm">
+                        <MdOutlineSell /> Buy NFT
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
+
+            <div className="p-6 text-white">
+              <h3 className="text-xl font-bold truncate">{nft.title || `Token #${nft.tokenId}`}</h3>
+              <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/5">
+                <span className="text-gray-400 text-sm font-medium uppercase tracking-wider">Price</span>
+                <span className="text-lg font-bold text-green-400">
+                  {nft.price ? ethers.formatEther(nft.price) : "0"} ETH
+                </span>
+              </div>
+              {nft.seller?.toLowerCase() === address?.toLowerCase() && (
+                <div className="mt-3 text-[10px] bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full w-fit font-bold uppercase tracking-tighter">
+                  Owned by you
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
-  )
+  );
+}
+
+function StatCard({ title, value }) {
+  return (
+    <div className="bg-white/5 border border-white/5 p-4 rounded-xl text-white">
+      <p className="text-gray-400 text-xs uppercase tracking-widest">{title}</p>
+      <p className="text-xl font-bold mt-1 truncate">{value}</p>
+    </div>
+  );
 }
