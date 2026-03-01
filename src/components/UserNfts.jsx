@@ -1,5 +1,6 @@
 "use client";
-import React, { useEffect, useState } from "react";
+
+import React, { useEffect, useState, useCallback} from "react";
 import { useAccount, useContractRead } from "wagmi";
 import {
   NftCollection,
@@ -78,24 +79,19 @@ export default function UserNfts() {
     const tx = await contract.setApprovalForAll(NftMarketPlace, true);
     await tx.wait();
   }
+  const fetchTokenMetadata = useCallback(async (tokenId) => {
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  const signer = await provider.getSigner();
+  const contract = new ethers.Contract(NftCollection, CollectionABI, signer);
 
-  async function fetchTokenMetadata(tokenId) {
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-    const contract = new ethers.Contract(
-      NftCollection,
-      CollectionABI,
-      signer
-    );
-
-    const data = await contract.tokenMetadata(tokenId);
-    return {
-      tokenId,
-      title: data[metadataKeys.title],
-      description: data[metadataKeys.description],
-      image: data[metadataKeys.image],
-    };
-  }
+  const data = await contract.tokenMetadata(tokenId);
+  return {
+    tokenId,
+    title: data[metadataKeys.title],
+    description: data[metadataKeys.description],
+    image: data[metadataKeys.image],
+  };
+}, [metadataKeys.title, metadataKeys.description, metadataKeys.image]);
 
   /* ----------------List Nfts---------------- */
   async function listNft(tokenId, priceInUSD, arbiter) {
@@ -157,12 +153,12 @@ export default function UserNfts() {
   /* ---------------- FETCH METADATA ---------------- */
 
   useEffect(() => {
-    if (!mounted || tokenIds.length === 0) return;
+  if (!mounted || tokenIds.length === 0) return;
 
-    Promise.all(tokenIds.map(fetchTokenMetadata))
-      .then(setMetadataList)
-      .catch(console.error);
-  }, [tokenIds, mounted]);
+  Promise.all(tokenIds.map(fetchTokenMetadata))
+    .then(setMetadataList)
+    .catch(console.error);
+}, [tokenIds, mounted, fetchTokenMetadata]); // Added fetchTokenMetadata here
 
   /* ---------------- HARD EXIT ---------------- */
 
@@ -224,7 +220,7 @@ return (
           </h2>
 
           <p className="text-gray-400 max-w-md">
-            You haven't minted or received any NFTs yet.  
+            You haven&apos;t minted or received any NFTs yet.  
             Start by creating your first NFT.
           </p>
 
